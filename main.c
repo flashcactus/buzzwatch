@@ -1,6 +1,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
-
+#include <avr/sleep.h>
+#include <avr/power.h>
 
 uint8_t cycles;
 
@@ -18,26 +19,28 @@ int main(void)
     WDTCR |= (1<<WDCE) | (1<<WDE);     // Enable the WDT Change Bit
     WDTCR = (1<<WDTIE) |                //Enable WDT Interrupt
              (1<<WDP2) | (1<<WDP1);     // Set Timeout to ~1s
-    /*
-    TCCR0B |= 1<<CS00 | 1<<CS02;  //Divide by 1024
-    TIMSK0 |= 1<<TOIE0;     //enable timer overflow interrupt
-    */
     sei();
+   
+    //we want the deepest sleep 
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 
     DDRB |= (1<<3);  
     PORTB |= (1<<3);
 
-    while(1) {}    
+    while(1) {
+        if (MCUCR & (1<<SE)) {//sleep enable bit is set
+            cli(); 
+            sleep_bod_disable();   // Disable BOD
+            sei(); 
+            sleep_cpu();           // Go to Sleep
+
+        }
+    } 
 }
 
 
-ISR(WDT_vect)
-{
-    /*
-    if ( cycles < 8 ) {
-        ++cycles;
-    } else {
-      */  cycles = 0;
-        PORTB ^= (1<<3);
-    //}
+ISR(WDT_vect){
+    sleep_disable(); 
+    PORTB ^= (1<<3);
+    sleep_enable();
 }
