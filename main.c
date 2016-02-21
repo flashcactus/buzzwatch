@@ -3,8 +3,28 @@
 #include <avr/sleep.h>
 #include <avr/power.h>
 
-uint8_t cycles;
+#define POT_ENABLE_PIN 3
+#define POT_PIN 4
+#define BUZZ_PIN 0
 
+uint8_t cycles;
+uint8_t buzz_on;
+#define BUZZ_LEN 1
+
+void shift_out(uint8_t b, uint8_t data_pins, uint8_t clk_pins) { //LSB first
+    uint8_t bb = b;
+    for(uint8_t i = 8; i>0; --i) {
+        DDRB |= data_pins | clk_pins;
+        PORTB &= ~clk_pins;     //pull clock down first
+        if(bb%2){               //write bit
+            PORTB |= data_pins;
+        } else {
+            PORTB &= ~data_pins;
+        }
+        PORTB |= clk_pins;      //clock
+        bb = bb>>1;
+    }
+}
 
 int main(void)
 {
@@ -24,8 +44,13 @@ int main(void)
     //we want the deepest sleep 
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 
-    DDRB |= (1<<3);  
-    PORTB |= (1<<3);
+    DDRB |= (1<<POT_ENABLE_PIN) | (1<<BUZZ_PIN);  
+    DDRB = 0xff;
+    DDRB &= ~(1<<POT_PIN);
+
+    //init globals
+    cycles = 0;
+    buzz_on = 0;
 
     while(1) {
         if (MCUCR & (1<<SE)) {//sleep enable bit is set
@@ -38,9 +63,30 @@ int main(void)
     } 
 }
 
-
+#define DATA_P 1
+#define CLK_P 2
+#define MV_P 0
 ISR(WDT_vect){
     sleep_disable(); 
-    PORTB ^= (1<<3);
+    PORTB ^= (1<<POT_ENABLE_PIN);
+    
+    PORTB &= ~(1<<MV_P); //pull down preemptively
+    ++cycles; //count
+    /*
+    if(cycles > 3) {
+        cycles = 0;
+        PORTB |= (1<<BUZZ_PIN);
+        buzz_on = BUZZ_LEN;
+    }
+   
+    if(!buzz_on) {
+        PORTB &= ~(1<<BUZZ_PIN);  //turn off
+    } else {
+        --buzz_on; //for the next cycle
+    }*/
+
+    shift_out(cycles, 1<<DATA_P, 1<<CLK_P); //shift out
+    PORTB |= (1<<MV_P); //move to output register
+
     sleep_enable();
 }
