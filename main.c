@@ -7,10 +7,13 @@
 #define POT_PIN 4
 #define BUZZ_PIN 0
 
+#define POT_FREQ 2
+#define BUZZ_LEN 1
+
+//globals
 uint8_t cycles;
 uint8_t buzz_on;
 uint8_t pot_value;
-#define BUZZ_LEN 1
 
 void shift_out(uint8_t b, uint8_t data_pins, uint8_t clk_pins) { //LSB first
     uint8_t bb = b;
@@ -43,8 +46,9 @@ int main(void)
     //setup the WDT properly now
     WDTCR |= (1<<WDCE) | (1<<WDE);     // Enable the WDT Change Bit
     WDTCR = (1<<WDTIE) |                //Enable WDT Interrupt
-             (1<<WDP2) | (1<<WDP1);     // Set Timeout to ~1s
-    
+             //(1<<WDP1) | (1<<WDP2);     // Set Timeout to ~1s
+            //(1<<WDP0); //32x
+            0; //speed up 64x for debug
     //setup pins
     DDRB |= (1<<POT_ENABLE_PIN) | (1<<BUZZ_PIN);  
     DDRB &= ~(1<<POT_PIN);
@@ -86,30 +90,29 @@ int main(void)
 #define MV_P 0
 ISR(WDT_vect){
     sleep_disable(); 
-    ++cycles; //count
-    
-    PORTB &= ~(1<<POT_ENABLE_PIN);  //put some current into the pot 
-                                    //(it's a PNP transistor, so pull it down)
-    ADCSRA |= (1<<ADEN) | (1<<ADSC);            //start ADC conversion
-    
-    //display byte on SR
-    //PORTB &= ~(1<<MV_P);
-    //shift_out(pot_value, 1<<DATA_P, 1<<CLK_P); //shift out
-    //PORTB |= (1<<MV_P);                        //make SR copy to output register
 
-    //manage the buzzer
-    /*
-    if(cycles > 3) {
-        cycles = 0;
+    if (! (cycles % POT_FREQ) ){
+        //get a new potvalue
+        PORTB &= ~(1<<POT_ENABLE_PIN);  //put some current into the pot 
+                                        //(it's a PNP transistor, so pull it down)
+        ADCSRA |= (1<<ADEN) | (1<<ADSC);            //start ADC conversion
+    }
+    
+    //increment after that check to escape deadlock @ pot_value = 0 (which will never update)
+    ++cycles;
+    if(cycles >= pot_value) {
+        cycles=0;
+        //buzz it!
         PORTB |= (1<<BUZZ_PIN);
         buzz_on = BUZZ_LEN;
     }
-   
+    
+    //is it time to stop buzzin'? 
     if(!buzz_on) {
         PORTB &= ~(1<<BUZZ_PIN);  //turn off
     } else {
         --buzz_on; //for the next cycle
-    }*/
+    }
     sleep_enable();
 }
 
