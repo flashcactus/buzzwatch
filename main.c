@@ -90,12 +90,12 @@ ISR(WDT_vect){
     
     PORTB &= ~(1<<POT_ENABLE_PIN);  //put some current into the pot 
                                     //(it's a PNP transistor, so pull it down)
-    ADCSRA |= (1<<ADSC);            //start ADC conversion
+    ADCSRA |= (1<<ADEN) | (1<<ADSC);            //start ADC conversion
     
     //display byte on SR
-    PORTB &= ~(1<<MV_P);
-    shift_out(pot_value, 1<<DATA_P, 1<<CLK_P); //shift out
-    PORTB |= (1<<MV_P);                        //make SR copy to output register
+    //PORTB &= ~(1<<MV_P);
+    //shift_out(pot_value, 1<<DATA_P, 1<<CLK_P); //shift out
+    //PORTB |= (1<<MV_P);                        //make SR copy to output register
 
     //manage the buzzer
     /*
@@ -117,4 +117,5 @@ ISR(WDT_vect){
 ISR(ADC_vect){                      //conversion complete
     PORTB |= (1<<POT_ENABLE_PIN);   //turn the pot off (again, PNP so pull up)
     pot_value = ADCH;               //get the value
+    ADCSRA &= ~(1<<ADEN);           //kill the ADC
 }
