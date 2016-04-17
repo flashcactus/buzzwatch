@@ -32,6 +32,8 @@ inline void timsetup() {
                             //  overflow=65.5ms
                             //  1s=15.25ovf;  
     
+    TIMSK0 |= (1<<TOIE0);        //enable the interrupt
+
     ovf_ticks=0;            //zero the timer&overflow.
     TCNT0=0;
 }
@@ -74,21 +76,30 @@ int main(void)
     //init globals
     delay_ctr = 0;
     buzz_pattern = 0;
-
+    
+    //setup the timer
+    timsetup();
+    
     //--- setup complete; re-enable interrupts ---
     sei();
-
+    
     //start main loop
     while(1) {
         if (                        //sleep-allowed conditions (all at once):
             !(ADCSRA & (1<<ADSC))   //  ADC not currently converting
             && MCUCR & (1<<SE)      //  sleep-enable bit is set (WDT routine finished)
-            && !buzz_pattern;       //  buzzed everything already
+            && !buzz_pattern        //  buzzed everything already
         ){
+            //turn everything off, to be sure
+            PORTB &= ~( (1<<BUZZ_PIN) | (1<<POT_ENABLE_PIN) ) ;
+            
+            // Disable BOD
             cli(); 
-            sleep_bod_disable();    // Disable BOD
+            sleep_bod_disable();    
             sei(); 
-            sleep_cpu();            // Go to Sleep
+            
+            // Go to Sleep
+            sleep_cpu();            
         }
     } 
 }
@@ -122,6 +133,8 @@ ISR(WDT_vect){
 
 ISR(TIM0_OVF_vect){
     ++ovf_ticks;
+    shift_out_1w(ovf_ticks, &PORTB, 1<<SHIFT_PIN, 10);
+    shift_out_1w(delay_ctr, &PORTB, 1<<SHIFT_PIN, 10);
     if(buzz_pattern&1) {
         PORTB |= (1<<BUZZ_PIN);   //turn on
     } else {
@@ -136,5 +149,4 @@ ISR(ADC_vect){                      //conversion complete
     pot_value = ADCH;               //get the value
     ADCSRA &= ~(1<<ADEN);           //kill the ADC
     //wait_len = pot_value;
-    //shift_out_1w_16(gen_patt(pot_value), &PORTB, 1<<SHIFT_PIN, 10);
 }

@@ -1,7 +1,7 @@
 
 inline void shift_out(uint8_t b, volatile uint8_t *port, uint8_t data_mask, uint8_t clk_mask) { //LSB first
     uint8_t bb = b;
-    for(uint8_t i = 8; i>0; --i) {
+    for(uint8_t i = 8; i; --i) {
         (*port) &= ~clk_mask;     //pull clock down first
         if(bb&1){               //write bit
             (*port) |= data_mask;
@@ -20,7 +20,7 @@ inline void shift_out_16(uint16_t b, volatile uint8_t *port, uint8_t data_mask, 
 
 inline void shift_out_1w(uint8_t b, volatile uint8_t *port, uint8_t out_mask, uint8_t delay) {
     uint8_t bb = b;
-    for(uint8_t i = 8; i>0; --i) {
+    for(uint8_t i = 8; i; --i) {
         if(bb&1){                   //write bit
             (*port) |= out_mask;
         } else {

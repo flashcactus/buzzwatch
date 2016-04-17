@@ -3,7 +3,7 @@ $fa=5;
 eps=0.001;
 
 mot_rad=3.02;
-mot_suppthick=1.6;
+mot_suppthick=4-eps;
 mot_suppaddw=0.8;
 mot_suppoff=2;
 mot_supphwdth=mot_rad+mot_suppaddw;
@@ -47,6 +47,7 @@ sw_hole_skirt=0.4;
 
 case_thick=0.8;
 case_pin_skirt=0.5;
+case_slitslack=0.1;
 
 nut_hole_add=0.2;
 nut_sz=nut_hole_add+5.5;
@@ -66,11 +67,15 @@ lid_skirt_w=0.8;
 lid_bh_base=1.5;
 lid_bh_foot=0.8;
 lid_bh_x=20;
+
+lid_lip_thk=0.8;
+lid_lip_depth=0.8;
+lid_lgrip_thk=0.8;
       
 strap_pindst=2;
 strap_pindia=1;
 strap_tabdia=3;
-strap_tabthick=1.2;
+strap_tabthick=4;
 
 module mynut() { nut(nut_sz,nut_thk); }
 module mybolt() { bolt(bolt_dia,bolt_len,bolt_head_len,bolt_head_td,bolt_dia); }
@@ -94,7 +99,7 @@ case_lid_slack=0.25;//min distance between lid & everything else
 
 
 motor_off=[brd_slack+mot_total_len+0.5,
-          brd_ly+brd_slack+eps,
+          brd_ly+brd_slack+mot_suppaddw/2-eps,
           -brd_botthick-brd_vslack-eps
           ];
 
@@ -158,6 +163,16 @@ module rmotrings(){
                 motrings();
 }
 
+
+module rmotcradle(){
+    difference() {
+        rmotrings();
+        translate([0,mot_supphwdth,mot_supphwdth+mot_rad]) {
+            cube(2*[mot_total_len,mot_rad,mot_rad],true);
+        }
+    }
+}
+
 module rmotkeepout(slack){
     translate([0,mot_supphwdth,mot_supphwdth])
         rotate(-90,[0,1,0])
@@ -175,11 +190,11 @@ module brdhole(x,y,rad,top,bot) {
         cylinder(top-bot,rad,rad);
 }
 
-module mainbrd(slack, rslack) { 
+module mainbrd(slack, rslack, zslack) { 
     union() {
         difference() {//the board
             translate([-slack,-slack,0])
-                cube([brd_lx+slack*2,brd_ly+slack*2,brd_bthick],false);
+                cube([brd_lx+slack*2,brd_ly+slack*2,brd_bthick+zslack],false);
             brdhole(0,0,brd_hrad,brd_bthick+0.1,-0.1);
             brdhole(0,1,brd_hrad,brd_bthick+0.1,-0.1);
             brdhole(1,0,brd_hrad,brd_bthick+0.1,-0.1);
@@ -200,8 +215,16 @@ module mainbrd(slack, rslack) {
     }
 }
 
-
-
+module lidlip(thickness,depth){
+    //lid grip lip
+    llip_dim = [depth+2*eps,
+                int_box[1]+2*eps,
+                thickness];
+    llip_off = int_box_off+[-eps,-eps,int_box[2]-llip_dim[2]];
+    
+    translate(llip_off)
+        cube(llip_dim);
+}
 
 module cbox(){        
     pin_brad = brd_hrad+case_pin_skirt;
@@ -214,11 +237,7 @@ module cbox(){
                 brd_bthick+case_thick-int_box_off[2]
                 ];
     slit_off = int_box_off+[0,brd_hoy-int_box_off[1],0];
-    
-    llip_dim = [case_thick+2*eps,
-                int_box[1]+2*eps,
-                case_thick];
-    llip_off = int_box_off+[-eps,-eps,int_box[2]-llip_dim[2]];
+
     
     union() {
         difference() {
@@ -241,8 +260,8 @@ module cbox(){
             cube(slit_dim);
         
         //lid grip
-        translate(llip_off)
-            cube(llip_dim);
+        lidlip(lid_lip_thk,lid_lip_depth);
+
         
         //screw mass
         bm_orad = bolt_head_td/2+nb_mass_thk;
@@ -261,7 +280,7 @@ module case(){
             cbox();
             
             //hole for rheo
-            mainbrd(brd_slack,brd_rheo_slack);
+            mainbrd(brd_slack,brd_rheo_slack,0);
             
             //hole for button
             translate(brd_sw_offset+[0,0,-sw_hole_h/2-sw_hole_skirt])
@@ -277,7 +296,7 @@ module case(){
         
         //motor
         translate(motor_off){
-            rmotrings();
+            rmotcradle();
         }
         
         translate(ext_box_off+[0,0,strap_tabdia/2])
@@ -303,30 +322,47 @@ module case(){
 }
 
 module lid(){
-    lid_dim = [ext_box[0]-eps,ext_box[1]-eps,case_thick+lid_skirt_h];
-    lid_off = ext_box_off+[eps/2,eps/2,(ext_box[2]-lid_skirt_h)];
-    lsksub_dim = lid_dim-[2,2,0]*(lid_skirt_w+case_thick)+[0,0,-case_thick+eps];
-    lsksub_off = lid_off+[1,1,0]*(lid_skirt_w+case_thick)+[0,0,-eps];
-    lidgrip_dim = [4*case_thick,lid_dim[1],lid_dim[2]+case_thick];
-    lidgrip_off = lid_off + [0,0,-1]*case_thick;
+    lid_dim = [ext_box[0],ext_box[1],case_thick];
+    lid_off = ext_box_off+[0,0,ext_box[2]];
+    //skirt mass
+    lsk_dim = lid_dim+[0,0,lid_skirt_h-case_thick]+[-2,-2,1]*eps;
+    lsk_off = ext_box_off+[eps,eps,(ext_box[2]-lid_skirt_h)];
+    //perimeter skirt 
+    lsksub_dim = lsk_dim-[2,2,0]*(lid_skirt_w+case_thick)+[0,0,2*eps];
+    lsksub_off = lsk_off+[1,1,0]*(lid_skirt_w+case_thick)+[0,0,-eps];
+    //case lip
+    lidgrip_dim = [
+        case_thick+3*lid_lip_depth-2*eps,
+        lid_dim[1]-2*eps,
+        lid_lgrip_thk+lid_lip_thk+case_slitslack+eps
+    ];
+    lidgrip_off = lid_off+[0,0,-lidgrip_dim[2]]+[1,1,1]*eps;
     
-    nut_off = bn_hoff+[0,0,lid_off[2]+case_thick+lid_skirt_h];
+    nut_off = bn_hoff+[0,0,lid_off[2]+case_thick];
 
     bh_hght = lid_off[2]+lid_skirt_h-brd_bthick;
     bh_z = lid_off[2]+lid_skirt_h-bh_hght;
     
     difference(){
         union(){
-            difference(){ //basic lid w/skirt
-                translate(lid_off) cube(lid_dim);
-                translate(lsksub_off) cube(lsksub_dim);
+            //lid top
+            translate(lid_off) cube(lid_dim);
+            //skirt
+            difference () {
+                    translate(lsk_off) cube(lsk_dim);
+                    translate(lsksub_off) cube(lsksub_dim);
+                    translate(brd_rheo_offset) cube(brd_rheo_rad*2,true);
             }
-            difference(){ //lip-grip
-                translate(lidgrip_off) cube(lidgrip_dim);
-                translate(brd_rheo_offset) cube(brd_rheo_rad*2,true);
+            //lip-grip
+            difference(){ 
+                translate(lidgrip_off) 
+                    cube(lidgrip_dim);
+                translate(brd_rheo_offset) 
+                    cube(brd_rheo_rad*2,true);
+                lidlip(lid_lip_thk+case_slitslack,lid_lip_depth+case_slitslack);
             }
 
-            intersection(){
+            translate([0,0,eps]) intersection(){
                 translate(int_box_off)
                     cube(int_box);
                 union(){
@@ -339,8 +375,7 @@ module lid(){
                             //nut mass
                     translate(nut_off) 
                         nut(nut_sz+nb_mass_thk, (nut_depth+nb_mass_thk)*2);                  
-                }
-                
+                }           
             }
             
             
@@ -393,10 +428,13 @@ module strappair(pwidth,twidth,pdist,pindia,tthick) {
 
 
 
+
+*rmotcradle();
+
 translate(-ext_box_off){
     *lid();
     case();
-    %mainbrd(0.4,0);
+    *mainbrd(0.4,0,0);
 }
 
 
