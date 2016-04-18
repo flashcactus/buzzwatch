@@ -21,9 +21,15 @@ uint8_t delay_ctr;
 uint8_t ovf_ticks; //counts timer overflows [see timsetup()]
 
 uint8_t pot_value;
-//uint8_t count_mode;
 
 uint16_t buzz_pattern;
+
+
+inline void timzero(){
+    //zero the timer&overflow.
+    ovf_ticks=0;            
+    TCNT0=0;
+}
 
 inline void timsetup() {
     TCCR0B |= (1<<CS02);    //set prescaler to 1/256. 
@@ -33,9 +39,17 @@ inline void timsetup() {
                             //  1s=15.25ovf;  
     
     TIMSK0 |= (1<<TOIE0);        //enable the interrupt
+    timzero();
+}
 
-    ovf_ticks=0;            //zero the timer&overflow.
-    TCNT0=0;
+inline void adcsetup() {
+    //setup the ADC
+    ADMUX &= ~(1 << REFS0);                 //use VCC as ref voltage
+    ADMUX |= (1<<ADLAR);                    //left-adjust result (for 8 MSBs in ADCH); 
+    ADMUX |= POT_PIN;                       //select pin ADC2 (PB4)
+    ADCSRA |= (1 << ADPS1) | (1 << ADPS0);  //set prescaler to 1/8 (125 KHz)
+    ADCSRA |= (1 << ADIE);                  //enable interrupt
+    ADCSRA |= (1 << ADEN);                  //enable the ADC
 }
 
 int main(void)
@@ -43,9 +57,10 @@ int main(void)
     //disable interrupts before setup
     cli();
     
-    //--- begin setup ---
+    //############## begin setup ##############
 
-    if(MCUSR & (1<<WDRF)){              // If a reset was caused by the Watchdog Timer...
+    if(MCUSR & (1<<WDRF)){              // If a reset was caused by the Watchdog Timer..
+                                        // (highly unlikely, but just in case)
         MCUSR &= ~(1<<WDRF);            // Clear the WDT reset flag
         WDTCR |= (1<<WDCE) | (1<<WDE);  // Enable the WD Change Bit
         WDTCR = 0x00;                   // Disable the WDT
@@ -55,32 +70,30 @@ int main(void)
     WDTCR |= (1<<WDCE) | (1<<WDE);      // Enable the WDT Change Bit
     WDTCR = (1<<WDTIE) |                //Enable WDT Interrupt
             //(1<<WDP1) | (1<<WDP2);    // Set Timeout to ~1s
-            (1<<WDP1)|(1<<WDP0);        //.125s
+            (1<<WDP1)|(1<<WDP0);        //.125s (8x, for debug)
             //0; //speed up 64x for debug
-    //setup pins
-    DDRB |= (1<<POT_ENABLE_PIN) | (1<<BUZZ_PIN) | (1<<SHIFT_PIN);  
-    DDRB &= ~(1<<POT_PIN) & ~(1<<BTN_PIN);
+    
+    //set i/o pin modes
+    DDRB |= (1<<POT_ENABLE_PIN) | (1<<BUZZ_PIN) | (1<<SHIFT_PIN);  //out
+    DDRB &= ~(1<<POT_PIN) & ~(1<<BTN_PIN);  //in
+    
+    //setup the timer
+    timsetup();
 
     //setup the ADC
-    ADMUX &= ~(1 << REFS0);                 //use VCC as ref voltage
-    ADMUX |= (1<<ADLAR);                    //left-adjust result (for 8 MSBs in ADCH); 
-    ADMUX |= POT_PIN;                       //select pin ADC2 (PB4)
-    ADCSRA |= (1 << ADPS1) | (1 << ADPS0);  //set prescaler to 1/8 (125 KHz)
-    ADCSRA |= (1 << ADIE);                  //enable interrupt
-    ADCSRA |= (1 << ADEN);                  //enable the ADC
+    adcsetup();
 
     //setup sleep
-    //we want the deepest sleep 
+    //we want the deepest (powerdown) sleep mode 
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 
     //init globals
     delay_ctr = 0;
     buzz_pattern = 0;
     
-    //setup the timer
-    timsetup();
     
-    //--- setup complete; re-enable interrupts ---
+    //########## setup complete; re-enable interrupts ##########
+
     sei();
     
     //start main loop
